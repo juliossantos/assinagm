@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assinatura de Documentos</title>
+    <link rel="shortcut icon" href="icon-192.png" type="image/x-icon">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#691010">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker registrado!'))
+                .catch(err => console.log('Erro ao registrar o Service Worker:', err));
+        }
+    </script>
+    <style>
+        body {
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #691010;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background: rgb(255, 196, 0);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 400px;
+        }
+
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            font-size: 1em;
+            color: white;
+            background-color: #bb2d2d;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .button:hover {
+            background-color: #eb3d1e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Escolha a Opção de Assinatura</h1>
+        <button class="button" onclick="location.href='nf.html'">Assinar Nota Fiscal</button>
+        <button class="button" onclick="location.href='boleto.html'">Assinar Boletos</button>
+    </div>
+</body>
+</html>

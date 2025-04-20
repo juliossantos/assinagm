@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assinar PDF</title>
+    <link rel="shortcut icon" href="icon-192.png" type="image/x-icon">
+    <script src="https://unpkg.com/pdf-lib"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #691010;
+    
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: rgb(255, 196, 0);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+            text-align: left;
+        }
+
+        input, button {
+            
+            width: 90%;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        input[type="text"], input[type="file"], input[type="color"] {
+            border: 1px solid #ccc;
+        }
+
+        canvas {
+            border: 2px solid black;
+            cursor: crosshair;
+            background: white;
+            width: 100%;
+            height: 200px;
+            touch-action: none;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            cursor: pointer;
+            background-color: #bb2d2d;
+            color: white;
+            border: none;
+        }
+
+        .btn:hover {
+            background: #e63838;
+        }
+
+        .error-message {
+            color: red;
+            font-size: 14px;
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            font-size: 14px;
+            color: #007bff;
+        }
+
+        .success-message {
+            color: green;
+            font-size: 14px;
+            display: none;
+        }
+
+        #progress-bar {
+            display: none;
+            width: 100%;
+            background: #f3f3f3;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        #progress {
+            width: 0%;
+            height: 10px;
+            background: #007bff;
+            border-radius: 5px;
+        }
+
+        @media (max-width: 600px) {
+            canvas {
+                height: 150px;
+            }
+        }
+
+        @media screen and (orientation: landscape) {
+            canvas {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Assinar digitalmente - NFE</h2>
+        <label for="RG">RG do cliente:</label>
+        <input type="text" id="RG" placeholder="Digite o RG">
+        <div id="error-rg" class="error-message">Por favor, insira o RG do cliente.</div>
+        
+        <label for="uploadPdf">Carregar PDF:</label>
+        <input type="file" id="uploadPdf" accept="application/pdf">
+        <div id="error-pdf" class="error-message">Por favor, carregue um arquivo PDF válido (até 10MB).</div>
+
+        <label for="corAssinatura">Escolha a cor da assinatura:</label>
+        <input type="color" id="corAssinatura" value="#000000">
+
+        <canvas id="signaturePad" aria-label="Área de assinatura"></canvas>
+        <button class="btn" aria-label="Limpar Assinatura" onclick="clearSignature()">Limpar Assinatura</button>
+        <button class="btn" aria-label="Salvar Assinatura no PDF" onclick="signPdf()">Salvar Assinatura no PDF</button>
+        
+        <p class="loading" id="loading-message">Processando PDF...</p>
+        <div id="error-signature" class="error-message">Faça uma assinatura antes de salvar.</div>
+        <div id="success-message" class="success-message">PDF assinado e salvo com sucesso!</div>
+        <div id="progress-bar">
+            <div id="progress"></div>
+        </div>
+    </div>
+
+    <script>
+        let pdfBytes = null;
+        const canvas = document.getElementById('signaturePad');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+        let signatureData = null;
+
+        // Configurações iniciais do canvas
+        function setupCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            ctx.strokeStyle = document.getElementById("corAssinatura").value;
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+        }
+
+        // Redesenhar a assinatura ao redimensionar ou mudar a orientação
+        function redrawSignature() {
+            if (signatureData) {
+                const img = new Image();
+                img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                img.src = signatureData;
+            }
+        }
+
+        // Ajustar o tamanho do canvas ao redimensionar a tela
+        function adjustCanvasSize() {
+            setupCanvas();
+            redrawSignature();
+        }
+
+        // Eventos de redimensionamento e mudança de orientação
+        window.addEventListener('resize', adjustCanvasSize);
+        window.addEventListener('orientationchange', () => setTimeout(adjustCanvasSize, 500));
+
+        // Validação do tamanho do arquivo PDF (máximo 10MB)
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+        document.getElementById('uploadPdf').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (file && file.size > MAX_FILE_SIZE) {
+                document.getElementById("error-pdf").style.display = "block";
+                event.target.value = ""; // Limpa o campo de upload
+                pdfBytes = null;
+            } else if (file) {
+                document.getElementById("error-pdf").style.display = "none";
+                const reader = new FileReader();
+                reader.readAsArrayBuffer(file);
+                reader.onload = () => pdfBytes = reader.result;
+                reader.onerror = () => document.getElementById("error-pdf").style.display = "block";
+            }
+        });
+
+        // Funções para desenhar no canvas
+        function startDrawing(e) {
+            drawing = true;
+            ctx.beginPath();
+            ctx.moveTo(getX(e), getY(e));
+            e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            ctx.lineTo(getX(e), getY(e));
+            ctx.stroke();
+            e.preventDefault();
+        }
+
+        function stopDrawing(e) {
+            if (!drawing) return;
+            drawing = false;
+            signatureData = canvas.toDataURL();
+            e.preventDefault();
+        }
+
+        function getX(e) {
+            return e.touches ? e.touches[0].clientX - canvas.getBoundingClientRect().left : e.offsetX;
+        }
+
+        function getY(e) {
+            return e.touches ? e.touches[0].clientY - canvas.getBoundingClientRect().top : e.offsetY;
+        }
+
+        // Alterar cor da assinatura
+        document.getElementById("corAssinatura").addEventListener("change", function() {
+            ctx.strokeStyle = this.value;
+        });
+
+        // Eventos do canvas
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseleave', stopDrawing);
+
+        canvas.addEventListener('touchstart', startDrawing, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('touchend', stopDrawing, { passive: false });
+
+        // Limpar assinatura
+        function clearSignature() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            signatureData = null;
+        }
+
+        // Salvar assinatura no PDF
+        async function signPdf() {
+            // Resetar mensagens de erro e sucesso
+            document.getElementById("error-rg").style.display = "none";
+            document.getElementById("error-pdf").style.display = "none";
+            document.getElementById("error-signature").style.display = "none";
+            document.getElementById("success-message").style.display = "none";
+            document.getElementById("loading-message").style.display = "block";
+            document.getElementById("progress-bar").style.display = "block";
+            updateProgress(0);
+
+            // Validações
+            const rg = document.getElementById("RG").value.trim();
+            if (!rg) {
+                document.getElementById("error-rg").style.display = "block";
+                document.getElementById("loading-message").style.display = "none";
+                document.getElementById("progress-bar").style.display = "none";
+                return;
+            }
+            if (!pdfBytes) {
+                document.getElementById("error-pdf").style.display = "block";
+                document.getElementById("loading-message").style.display = "none";
+                document.getElementById("progress-bar").style.display = "none";
+                return;
+            }
+            if (!signatureData) {
+                document.getElementById("error-signature").style.display = "block";
+                document.getElementById("loading-message").style.display = "none";
+                document.getElementById("progress-bar").style.display = "none";
+                return;
+            }
+
+            try {
+                // Carregar o PDF
+                const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                const firstPage = pdfDoc.getPages()[0];
+                const signatureImage = await pdfDoc.embedPng(signatureData);
+
+                // Inserir a assinatura no PDF
+                firstPage.drawImage(signatureImage, { x: 190, y: 760, width: 200, height: 50 });
+
+                // Salvar o PDF modificado
+                const modifiedPdfBytes = await pdfDoc.save();
+                updateProgress(100);
+
+                const blob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = "documento_assinado.pdf";
+                link.click();
+
+                // Feedback visual
+                document.getElementById("success-message").style.display = "block";
+            } catch (error) {
+                console.error(error);
+                alert("Erro ao assinar o PDF. Por favor, tente novamente.");
+            } finally {
+                document.getElementById("loading-message").style.display = "none";
+                document.getElementById("progress-bar").style.display = "none";
+            }
+        }
+
+        // Atualizar barra de progresso
+        function updateProgress(percentage) {
+            document.getElementById("progress").style.width = percentage + "%";
+        }
+
+        // Inicializar o canvas
+        setupCanvas();
+    </script>
+</body>
+</html>
